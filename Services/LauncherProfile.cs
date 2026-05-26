@@ -13,7 +13,7 @@ namespace GitHubLauncher.Core.Services
         public virtual string CliUserAgent => "GitHubLauncher-CLI";
         public virtual string UpdaterUserAgent => "GitHubLauncher-Updater";
         public virtual string SteamTag => DisplayName;
-        public virtual void ConfigureInstalledApp(string appPath, bool isPortable)
+        public virtual void ConfigureInstalledApp(string appPath)
         {
         }
     }
