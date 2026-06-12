@@ -233,12 +233,6 @@ public static class GameInstallationService
 
     static async Task ExtractZipAsync(string downloadPath, string gamePath)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            ZipFile.ExtractToDirectory(downloadPath, gamePath, overwriteFiles: true);
-            return;
-        }
-
         var tempExtractPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempExtractPath);
 
@@ -267,7 +261,7 @@ public static class GameInstallationService
                     return;
                 }
             }
-            else
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 var tarGzFile = Directory.GetFiles(tempExtractPath, "*.tar.gz", SearchOption.AllDirectories)
                     .FirstOrDefault();
@@ -279,12 +273,26 @@ public static class GameInstallationService
                 }
             }
 
-            MoveDirectoryContents(tempExtractPath, gamePath);
+            var sourcePath = GetEffectiveExtractionSource(tempExtractPath);
+            MoveDirectoryContents(sourcePath, gamePath);
         }
         finally
         {
             TryDeleteDirectory(tempExtractPath);
         }
+    }
+
+    static string GetEffectiveExtractionSource(string extractPath)
+    {
+        var rootDirs = Directory.GetDirectories(extractPath, "*", SearchOption.TopDirectoryOnly);
+        var rootFiles = Directory.GetFiles(extractPath, "*", SearchOption.TopDirectoryOnly);
+
+        if (rootDirs.Length == 1 && rootFiles.Length == 0)
+        {
+            return rootDirs[0];
+        }
+
+        return extractPath;
     }
 
     static void ExtractNestedZips(string tempExtractPath)
