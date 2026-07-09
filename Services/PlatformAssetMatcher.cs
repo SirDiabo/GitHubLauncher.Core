@@ -69,7 +69,7 @@ namespace GitHubLauncher.Core.Services
             {
                 System.Diagnostics.Debug.WriteLine("Checking Windows patterns...");
 
-                if (HasAnyOf(assetNameLower, "linux", "macos", "osx", "darwin", "apple", ".deb", ".rpm", ".appimage", ".dmg", ".pkg", "switch"))
+                if (HasAnyOf(assetNameLower, "linux", "macos", "osx", "darwin", "apple-silicon", ".deb", ".rpm", ".appimage", ".dmg", ".pkg", "switch"))
                 {
                     System.Diagnostics.Debug.WriteLine("Excluded: contains non-Windows platform marker");
                     return false;
@@ -134,8 +134,12 @@ namespace GitHubLauncher.Core.Services
                         return false;
                     }
 
-                    bool isLinuxX64 = HasAnyOf(assetNameLower, "x86_64", "x64", "amd64", "x86-64") &&
-                                      !HasAnyOf(assetNameLower, "arm64", "aarch64", "armv7", "armhf", "arm-");
+                    // We already know this is a Linux asset (hasLinux) and not 32-bit.
+                    // Reject ARM builds; treat everything else as x64 — an explicit
+                    // x86_64/amd64 marker OR no arch marker at all (the common case
+                    // for a single generic Linux release, e.g. app-linux.tar.gz).
+                    bool isArm = HasAnyOf(assetNameLower, "arm64", "aarch64", "armv7", "armhf", "arm-");
+                    bool isLinuxX64 = !isArm;
 
                     System.Diagnostics.Debug.WriteLine($"Linux x64 match result: {isLinuxX64}");
                     return isLinuxX64;
