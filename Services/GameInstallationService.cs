@@ -1,7 +1,7 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace GitHubLauncher.Core.Services;
 
@@ -330,9 +330,20 @@ public static class GameInstallationService
 
     static void ExtractTarGzWindows(string sourceFilePath, string destinationDirectoryPath)
     {
+        // Uses .NET's own tar reader (System.Formats.Tar, available since .NET 7)
+        // instead of a hand-rolled 512-byte-header parser. The old parser only
+        // understood the plain classic tar format: it read the file-size field
+        // as a plain ASCII octal string, which breaks on anything a modern
+        // `tar` actually produces in practice - PAX extended headers (used for
+        // long paths, which is exactly what a nested game-asset archive tends
+        // to have), GNU long-name/long-link entries, or large files encoded
+        // with GNU's base-256 size format - all of which make that field
+        // contain something other than a plain octal number, causing
+        // Convert.ToInt64(_, 8) to fail with "Could not find any recognizable
+        // digits." TarFile.ExtractToDirectory handles all of these correctly.
         using var inputStream = File.OpenRead(sourceFilePath);
         using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
-        ExtractTarFromStream(gzipStream, destinationDirectoryPath);
+        TarFile.ExtractToDirectory(gzipStream, destinationDirectoryPath, overwriteFiles: true);
     }
 
     static async Task ExtractTarGzUnixAsync(string sourceFilePath, string destinationDirectoryPath)
@@ -354,68 +365,6 @@ public static class GameInstallationService
         {
             var errorOutput = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
             throw new InvalidOperationException($"Tar extraction failed: {errorOutput}");
-        }
-    }
-
-    static string GetSafeExtractionPath(string destinationDirectoryPath, string archivePath)
-    {
-        var sanitizedArchivePath = archivePath.Replace('/', Path.DirectorySeparatorChar)
-            .Replace('\\', Path.DirectorySeparatorChar);
-        var fullDestinationRoot = Path.GetFullPath(destinationDirectoryPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var fullDestinationPath = Path.GetFullPath(Path.Combine(fullDestinationRoot, sanitizedArchivePath));
-
-        if (!fullDestinationPath.StartsWith(fullDestinationRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-            !fullDestinationPath.Equals(fullDestinationRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException($"Archive entry escapes the destination directory: {archivePath}");
-        }
-
-        return fullDestinationPath;
-    }
-
-    static void ExtractTarFromStream(Stream tarStream, string destinationDirectoryPath)
-    {
-        using var reader = new BinaryReader(tarStream);
-        while (true)
-        {
-            var headerBytes = reader.ReadBytes(512);
-            if (headerBytes.Length < 512) break;
-
-            var fileName = Encoding.ASCII.GetString(headerBytes, 0, 100).TrimEnd('\0');
-            if (string.IsNullOrWhiteSpace(fileName)) break;
-
-            var fileSizeStr = Encoding.ASCII.GetString(headerBytes, 124, 12).TrimEnd('\0');
-            var fileSize = Convert.ToInt64(fileSizeStr, 8);
-            var fileType = headerBytes[156];
-            var destPath = GetSafeExtractionPath(destinationDirectoryPath, fileName);
-
-            if (fileType == '5')
-            {
-                Directory.CreateDirectory(destPath);
-            }
-            else
-            {
-                var destinationDirectory = Path.GetDirectoryName(destPath);
-                if (string.IsNullOrEmpty(destinationDirectory))
-                {
-                    throw new InvalidDataException($"Invalid archive entry path: {fileName}");
-                }
-
-                Directory.CreateDirectory(destinationDirectory);
-
-                using var fileStream = File.Create(destPath);
-                var blocksToRead = (int)Math.Ceiling((double)fileSize / 512);
-                var fileBytes = new byte[blocksToRead * 512];
-                reader.Read(fileBytes, 0, fileBytes.Length);
-                fileStream.Write(fileBytes, 0, (int)fileSize);
-            }
-
-            var paddingBytes = 512 - (int)(fileSize % 512);
-            if (paddingBytes < 512)
-            {
-                reader.ReadBytes(paddingBytes);
-            }
         }
     }
 
