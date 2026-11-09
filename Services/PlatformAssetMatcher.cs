@@ -121,7 +121,7 @@ namespace GitHubLauncher.Core.Services
 
                 if (platformLower.Contains("arm64") || platformLower.Contains("arm") || platformLower.Contains("aarch64"))
                 {
-                    bool isArm = HasAnyOf(assetNameLower, "arm64", "aarch64", "armv7", "armhf", "arm-");
+                    bool isArm = HasArmMarker(assetNameLower);
                     System.Diagnostics.Debug.WriteLine($"Linux ARM64 match result: {isArm}");
                     return isArm;
                 }
@@ -135,7 +135,7 @@ namespace GitHubLauncher.Core.Services
                     }
 
                     bool isLinuxX64 = HasAnyOf(assetNameLower, "x86_64", "x64", "amd64", "x86-64") &&
-                                      !HasAnyOf(assetNameLower, "arm64", "aarch64", "armv7", "armhf", "arm-");
+                                      !HasArmMarker(assetNameLower);
 
                     System.Diagnostics.Debug.WriteLine($"Linux x64 match result: {isLinuxX64}");
                     return isLinuxX64;
@@ -146,6 +146,13 @@ namespace GitHubLauncher.Core.Services
             bool fallbackMatch = assetNameLower.Contains(platformLower);
             System.Diagnostics.Debug.WriteLine($"Fallback match result: {fallbackMatch}");
             return fallbackMatch;
+        }
+
+        // "arm-" only counts at the start of a word, so a name such as "adams-ant-farm-linux" is not read as an ARM build.
+        private static bool HasArmMarker(string input)
+        {
+            return HasAnyOf(input, "arm64", "aarch64", "armv7", "armhf") ||
+                   Regex.IsMatch(input, "(?<![a-z])arm-");
         }
 
         public static bool HasAnyOf(string input, params string[] substrings)
